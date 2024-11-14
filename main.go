@@ -97,7 +97,7 @@ func main() {
 	cmd := CommandContext(ctx, "wails", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // 设置新的进程组
+	//cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // 设置新的进程组
 
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("命令执行失败: %s\n", err)
@@ -255,7 +255,9 @@ func main() {
 	<-ch
 	cancelFunc()
 	// 使用负的 PID 发送信号，以便终止整个进程组
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	for _, instance := range dlvInstMap {
+		_ = syscall.Kill(instance.Pid, syscall.SIGTERM)
+	}
 }
 
 // 查找符合 outputFilename 的子进程
