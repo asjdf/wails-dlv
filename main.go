@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hashicorp/go-multierror"
 	"github.com/samber/lo"
+	"github.com/shirou/gopsutil/v4/process"
 	"io"
 	"math/rand/v2"
 	"net"
@@ -223,7 +225,10 @@ func main() {
 						return instance.CreatedAt.Before(time.Now().Add(-2 * time.Second))
 					})[1:] {
 						fmt.Println("销毁实例", instance.String())
-						_ = syscall.Kill(instance.Pid, syscall.SIGKILL)
+						err := killProcess(int32(instance.Pid))
+						if err != nil {
+							fmt.Printf("销毁实例%s失败，错误为%s", instance.String(), err)
+						}
 						//dlvInstList = lo.Filter(dlvInstList, func(instance *DlvInstance, _ int) bool { return instance != instance })
 						dlvInstMu.Lock()
 						//_ = syscall.Kill(dlvInst.Pid, syscall.SIGKILL)
@@ -256,7 +261,10 @@ func main() {
 	cancelFunc()
 	// 使用负的 PID 发送信号，以便终止整个进程组
 	for _, instance := range dlvInstMap {
-		_ = syscall.Kill(instance.Pid, syscall.SIGTERM)
+		err = killProcess(int32(instance.Pid))
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 }
 
@@ -290,4 +298,27 @@ func findSpecificChildProcesses(parentPID int, outputFilename string) map[int]st
 		}
 	}
 	return matchedProcesses
+}
+
+func killProcess(pid int32) error {
+	p, err := process.NewProcess(pid) // Specify process id of parent
+	if err != nil {
+		return err
+	}
+	child, err := p.Children()
+	if err != nil {
+		return err
+	}
+	var errs error
+	for _, v := range child {
+		err = v.Kill() // Kill each child
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		}
+	}
+	if errs != nil {
+		return errs
+	}
+
+	return p.Kill()
 }
